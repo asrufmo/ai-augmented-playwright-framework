@@ -27,55 +27,197 @@ A production-ready test automation framework built with **Playwright + TypeScrip
 playwright-starter/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml              # Quality gate → API tests → UI matrix → BrowserStack
+│       └── ci.yml                    # Quality gate → API → UI matrix → BrowserStack
 │
 ├── config/
-│   └── environments.ts         # local / staging / production env switching via ENVIRONMENT=
+│   └── environments.ts               # local / staging / production via ENVIRONMENT=
 │
 ├── fixtures/
-│   ├── auth.fixture.ts         # Extends base test with authenticatedPage, usersClient etc.
-│   └── index.ts                # Re-exports — tests import from here, not individual files
+│   ├── pages.fixture.ts              # Injects pre-navigated page objects (loginPage, todoPage …)
+│   ├── auth.fixture.ts               # Extends pages fixture — adds authenticatedPage, usersClient …
+│   └── index.ts                      # Single import point for all tests
 │
-├── pages/                      # Page Object Model
-│   ├── base.page.ts            # Navigation, assertions, screenshot helpers (abstract)
-│   ├── login.page.ts
+├── pages/                            # Page Object Model
+│   ├── base.page.ts                  # Abstract — navigation, assertions, screenshot helpers
+│   ├── login.page.ts                 # login(), loginAndWaitForDashboard() encapsulate the flow
 │   ├── dashboard.page.ts
-│   └── todomvc.page.ts         # Derived from live ARIA snapshot — selectors are grounded
+│   └── todomvc.page.ts               # Selectors derived from live ARIA snapshots
 │
-├── api-clients/                # Typed HTTP layer built on Playwright's APIRequestContext
-│   ├── base.client.ts          # Auth injection, logging, error handling, JSON parsing
+├── api-clients/                      # Typed HTTP layer over Playwright's APIRequestContext
+│   ├── base.client.ts                # Auth injection, timing, logging, JSON parsing
 │   ├── auth.client.ts
 │   ├── users.client.ts
-│   └── jsonplaceholder.client.ts  # Public REST API client (no auth)
+│   └── jsonplaceholder.client.ts
 │
 ├── tests/
-│   ├── ui/                     # Auth-dependent UI tests (requires setup project)
-│   │   └── auth.setup.ts
-│   ├── public/                 # Auth-free UI tests — run on chromium + firefox + BrowserStack
-│   │   └── todomvc.spec.ts     # 20 tests across 7 behaviour groups
-│   └── api/                    # Headless API tests — fastest CI feedback
+│   ├── ui/                           # Auth-dependent — requires `setup` project
+│   │   ├── auth.setup.ts             # Calls LoginPage.loginAndWaitForDashboard()
+│   │   └── login.spec.ts             # Uses loginPage + dashboardPage fixtures
+│   ├── public/                       # Auth-free — runs on chromium, firefox, BrowserStack
+│   │   └── todomvc.spec.ts           # Uses todoPage fixture — no beforeEach wiring
+│   └── api/                          # Headless — fastest CI feedback loop
 │       ├── users.spec.ts
-│       └── jsonplaceholder.spec.ts  # 13 tests: CRUD, 4xx, shape, perf threshold
+│       └── jsonplaceholder.spec.ts
 │
 ├── performance/
-│   └── posts.k6.js             # k6 load profile: ramp → steady → spike; p95/p99 thresholds
+│   └── posts.k6.js                   # Ramp → steady → spike; p95/p99 thresholds per endpoint
 │
-├── constants/index.ts          # HTTP status codes, timeouts, routes, perf thresholds
-├── types/index.ts              # Domain interfaces shared across layers
+├── constants/index.ts                # HTTP codes, timeouts, routes, perf thresholds
+├── types/index.ts                    # Shared domain interfaces across all layers
 └── utils/
-    ├── logger.ts               # Winston — structured logs at info/warn/error per request
+    ├── logger.ts                     # Winston — structured per-request logs
     └── helpers.ts
 ```
 
-### Key design decisions
+---
 
-**ARIA-first selectors** — All page objects use `getByRole`, `getByLabel`, and `getByText` sourced from live `page.ariaSnapshot()` captures. This makes tests resilient to CSS/class changes and doubles as an accessibility audit.
+## Design Patterns
 
-**Base class hierarchy** — `BasePage` and `BaseApiClient` absorb boilerplate (navigation, auth headers, timing, JSON parsing). Concrete classes stay under 60 lines and contain only domain logic.
+### 1. Page Object Model (POM)
 
-**Project isolation** — Three Playwright projects keep concerns separate: `api` (headless, fast), `public` (no-auth UI), `chromium/firefox` (auth-dependent UI). CI runs `api` and `public` on every push; auth-dependent UI runs only when a server is available.
+Each page of the application is represented by a dedicated class. Tests interact with the page through its public API, never through raw locators.
 
-**BrowserStack as an opt-in layer** — The `bs-*` projects activate only when `BROWSERSTACK_USERNAME` + `BROWSERSTACK_ACCESS_KEY` are set. Local runs are never interrupted; CI gates on BrowserStack only on pushes to `main`.
+```
+BasePage (abstract)
+  ├── LoginPage
+  ├── DashboardPage
+  └── TodoMVCPage
+```
+
+`BasePage` defines the contract — `navigate()`, `assertURL()`, `assertVisible()`, `getAccessibilitySnapshot()` — and all concrete pages inherit it. This means a selector change in production requires updating exactly one class, not every test that touches that page.
+
+```typescript
+// pages/login.page.ts
+async loginAndWaitForDashboard(email: string, password: string): Promise<void> {
+  await this.fill(this.emailInput, email);
+  await this.fill(this.passwordInput, password);
+  await this.click(this.submitButton);
+  await this.assertURL(/\/dashboard/);
+}
+```
+
+Tests never call `fill` + `click` + `waitForURL` in sequence. They call `loginAndWaitForDashboard`. If the login flow changes (e.g. a two-step email/password), only `LoginPage` changes.
+
+---
+
+### 2. Fixture Pattern (Dependency Injection)
+
+Playwright's fixture system is used as a dependency injection container. Tests declare what they need in their function signature; they never construct or navigate page objects themselves.
+
+**The fixture chain:**
+
+```
+@playwright/test (base)
+      ↓  extends
+pages.fixture.ts   →  provides: loginPage, dashboardPage, todoPage
+      ↓  extends
+auth.fixture.ts    →  provides: authenticatedPage, adminPage, userToken, usersClient
+      ↓  re-exported via
+fixtures/index.ts  →  single import for all tests
+```
+
+Each fixture is lazy — it only instantiates when a test declares it. A test that receives `{ todoPage }` never triggers `loginPage` or `usersClient` setup.
+
+```typescript
+// fixtures/pages.fixture.ts
+export const test = base.extend<PageFixtures>({
+  todoPage: async ({ page }, use) => {
+    const p = new TodoMVCPage(page);
+    await p.navigate();   // navigation is the fixture's responsibility
+    await use(p);         // test runs here
+  },                      // teardown happens automatically after use()
+});
+```
+
+```typescript
+// test — declares dependencies, owns zero setup code
+test('adds a todo', async ({ todoPage }) => {
+  await todoPage.addTodo('Buy groceries');
+  await todoPage.assertTodoVisible('Buy groceries');
+});
+```
+
+---
+
+### 3. Template Method Pattern
+
+`BasePage` and `BaseApiClient` define the skeleton of an operation and let subclasses fill in the specifics — the classic Template Method pattern.
+
+`BaseApiClient.send()` is the template: it always injects auth headers, measures timing, logs the call, and returns an `APIResponse`. Concrete clients only declare *what* to call, never *how* to call it.
+
+```typescript
+// api-clients/base.client.ts — the template
+private async send(method, url, options, body?): Promise<APIResponse> {
+  const headers = { ...defaults, ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}) };
+  const start = Date.now();
+  const response = await this.request.fetch(url, { method, headers, ... });
+  logApiCall(method, url, response.status(), Date.now() - start);
+  return response;
+}
+
+// api-clients/users.client.ts — the specialisation
+async listUsers(params?: ListUsersParams): Promise<APIResponse> {
+  return this.get(API.USERS.BASE, { params });  // delegates to the template
+}
+```
+
+---
+
+### 4. Facade Pattern
+
+Complex, multi-step interactions are hidden behind a single method. The caller doesn't know how many steps are involved.
+
+```typescript
+// Before — caller owns every step (fragile, duplicated across tests)
+await page.goto('/login');
+await page.getByLabel('Email address').fill(email);
+await page.getByLabel('Password').fill(password);
+await page.getByRole('button', { name: 'Sign in' }).click();
+await page.waitForURL(/\/dashboard/);
+
+// After — facade hides the steps (one call, one place to change)
+await loginPage.loginAndWaitForDashboard(email, password);
+```
+
+The same principle applies to `TodoMVCPage.fillEditAndDiscard()`, which encapsulates a double-click → type → Escape sequence, and `deleteTodo()`, which handles the hover-to-reveal pattern internally.
+
+---
+
+### 5. Strategy Pattern (Environment Configuration)
+
+The `Env` class selects a configuration strategy at runtime based on the `ENVIRONMENT` variable. The caller always calls `Env.current()` — it doesn't know or care which environment it gets.
+
+```typescript
+// config/environments.ts
+const environments: Record<string, Environment> = {
+  local:      { baseURL: 'http://localhost:3000', ... },
+  staging:    { baseURL: 'https://staging.example.com', ... },
+  production: { baseURL: 'https://app.example.com', ... },
+};
+
+export const Env = {
+  current(): Environment {
+    return environments[process.env.ENVIRONMENT ?? 'local'];
+  },
+};
+```
+
+Switching environments requires no code change — only an env var: `ENVIRONMENT=staging npm run test:ui`.
+
+---
+
+### 6. Layered Architecture
+
+Strict one-way dependency flow between layers prevents coupling:
+
+```
+Tests
+  └── depends on → Fixtures
+                      └── depends on → Pages / API Clients
+                                            └── depends on → Constants / Types / Utils
+```
+
+Tests never import from `api-clients/` directly. API clients never import from `pages/`. Constants never import from anywhere. This means any layer can be replaced without touching the others.
 
 ---
 
@@ -183,36 +325,3 @@ push / PR
 1. Go to your repo → **Settings → Secrets and variables → Actions**
 2. Add `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY`
 3. The `test-browserstack` job runs automatically on every push to `main`
-
----
-
-## Framework Patterns
-
-### Page Object
-
-```typescript
-// pages/todomvc.page.ts — selectors sourced from live ariaSnapshot()
-const item = this.page.getByRole('listitem').filter({ hasText: text });
-await item.hover();
-await item.getByRole('button', { name: 'Delete' }).click();
-```
-
-### API Client
-
-```typescript
-// api-clients/jsonplaceholder.client.ts — extends BaseApiClient
-listPosts(userId?: number): Promise<APIResponse> {
-  return this.get(`${BASE}/posts`, userId !== undefined ? { params: { userId } } : {});
-}
-```
-
-### Fixture composition
-
-```typescript
-// fixtures/auth.fixture.ts — builds on Playwright's base test
-export const test = base.extend<AuthFixtures>({
-  usersClient: async ({ request, userToken }, use) => {
-    await use(new UsersApiClient(request, userToken));
-  },
-});
-```
