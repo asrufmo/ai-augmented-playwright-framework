@@ -325,3 +325,181 @@ push / PR
 1. Go to your repo → **Settings → Secrets and variables → Actions**
 2. Add `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY`
 3. The `test-browserstack` job runs automatically on every push to `main`
+
+---
+
+## Adding New UI Tests with Playwright MCP
+
+The tests in this framework were written using the **Playwright MCP** (Model Context Protocol) server inside Claude Code. Instead of guessing selectors from source code, you navigate to the live page, capture its real accessibility tree, interact with it to expose different states, and write selectors grounded in what the browser actually renders.
+
+This workflow eliminates an entire category of test failure: selectors that look right but don't match the live DOM.
+
+### Prerequisites
+
+The Playwright MCP server is configured in `.mcp.json` at the project root:
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
+```
+
+Open Claude Code in this project directory — the MCP server starts automatically.
+
+---
+
+### Step-by-step workflow
+
+#### 1. Navigate to the target page
+
+```
+navigate to https://your-app.com/target-page
+```
+
+The MCP opens a real browser. Use it for any page — local dev server, staging, or a public demo.
+
+#### 2. Capture the initial ARIA snapshot
+
+```
+take a snapshot of the current page
+```
+
+The response is a YAML accessibility tree — every interactive element with its role, name, and ref:
+
+```yaml
+- heading "Shopping Cart" [level=1]
+- list [ref=e12]:
+  - listitem [ref=e13]:
+    - generic [ref=e14]: Nike Air Max
+    - generic [ref=e15]: £89.99
+    - button "Remove item" [ref=e16]
+- generic [ref=e20]:
+    - strong [ref=e21]: "2"
+    - text: items
+- button "Proceed to checkout" [ref=e22] [cursor=pointer]
+```
+
+**Read this tree carefully before writing a single locator.** The role and name here are exactly what Playwright's `getByRole` expects.
+
+#### 3. Interact with the page to expose all states
+
+A single snapshot only captures the initial state. For any page with dynamic behaviour, trigger each state and snapshot it:
+
+```
+click the "Add to cart" button, then take a snapshot
+fill the quantity field with 3, then take a snapshot
+click "Remove item" on the first product, then take a snapshot
+```
+
+Capture at least: empty state, populated state, error state, loading state.
+
+#### 4. Map ARIA tree → Page Object locators
+
+Each node in the ARIA tree maps directly to a Playwright locator. Use the role + accessible name — never CSS classes or test IDs unless no semantic alternative exists.
+
+| ARIA tree entry | Playwright locator |
+|---|---|
+| `button "Remove item"` | `page.getByRole('button', { name: 'Remove item' })` |
+| `textbox "Quantity"` | `page.getByRole('textbox', { name: 'Quantity' })` or `page.getByLabel('Quantity')` |
+| `listitem` containing text | `page.getByRole('listitem').filter({ hasText: 'Nike Air Max' })` |
+| `strong "2"` + text `items` | `page.locator('.cart-count')` — use CSS only when ARIA role is `generic` with no name |
+| `checkbox "Toggle Todo" [checked]` | `page.getByLabel('Toggle Todo')` → assert with `.toBeChecked()` |
+
+#### 5. Write the Page Object
+
+Create `pages/cart.page.ts` extending `BasePage`. Every public method is a meaningful action or assertion — no raw locator exposure:
+
+```typescript
+import { type Page, type Locator, expect } from '@playwright/test';
+import { BasePage } from './base.page';
+
+export class CartPage extends BasePage {
+  protected readonly path = '/cart';
+
+  // Locators derived directly from the ARIA snapshot
+  private itemRow(name: string): Locator {
+    return this.page.getByRole('listitem').filter({ hasText: name });
+  }
+
+  async removeItem(name: string): Promise<void> {
+    const row = this.itemRow(name);
+    await row.hover();
+    await row.getByRole('button', { name: 'Remove item' }).click();
+  }
+
+  async proceedToCheckout(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Proceed to checkout' }).click();
+    await this.assertURL(/\/checkout/);
+  }
+
+  async assertItemCount(count: number): Promise<void> {
+    const word = count === 1 ? 'item' : 'items';
+    await expect(this.page.locator('.cart-count')).toHaveText(`${count} ${word}`);
+  }
+
+  async assertItemVisible(name: string): Promise<void> {
+    await expect(this.itemRow(name)).toBeVisible();
+  }
+}
+```
+
+#### 6. Register the fixture
+
+Add `cartPage` to `fixtures/pages.fixture.ts`:
+
+```typescript
+import { CartPage } from '../pages/cart.page';
+
+interface PageFixtures {
+  loginPage: LoginPage;
+  dashboardPage: DashboardPage;
+  todoPage: TodoMVCPage;
+  cartPage: CartPage;           // ← add here
+}
+
+export const test = base.extend<PageFixtures>({
+  // ... existing fixtures ...
+  cartPage: async ({ page }, use) => {
+    const p = new CartPage(page);
+    await p.navigate();
+    await use(p);
+  },
+});
+```
+
+Tests can now receive `cartPage` as a fixture parameter — no `new`, no `navigate()`.
+
+#### 7. Write the tests
+
+```typescript
+import { test } from '../../fixtures';
+
+test.describe('Cart', () => {
+  test('removes an item from the cart', async ({ cartPage }) => {
+    await cartPage.removeItem('Nike Air Max');
+    await cartPage.assertItemCount(1);
+  });
+
+  test('proceeds to checkout', async ({ cartPage }) => {
+    await cartPage.proceedToCheckout();
+    await cartPage.assertURL(/\/checkout/);
+  });
+});
+```
+
+---
+
+### Offline snapshot capture (no MCP)
+
+If you prefer a headless script instead of the interactive MCP workflow:
+
+```bash
+npm run ai:snapshot -- --url https://your-app.com/cart
+```
+
+This runs `ai-workflows/scripts/capture-snapshot.ts`, which writes the ARIA snapshot and a full-page screenshot to `ai-workflows/output/`. Use the snapshot as input to the prompt template in `ai-workflows/prompts/test-generation.md` to generate a first-draft test file for human review.
