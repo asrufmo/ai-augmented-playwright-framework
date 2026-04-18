@@ -503,3 +503,4 @@ npm run ai:snapshot -- --url https://your-app.com/cart
 ```
 
 This runs `ai-workflows/scripts/capture-snapshot.ts`, which writes the ARIA snapshot and a full-page screenshot to `ai-workflows/output/`. Use the snapshot as input to the prompt template in `ai-workflows/prompts/test-generation.md` to generate a first-draft test file for human review.
+# ai-augmented-playwright-framework
