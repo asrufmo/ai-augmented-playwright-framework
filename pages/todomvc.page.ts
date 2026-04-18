@@ -43,6 +43,13 @@ export class TodoMVCPage extends BasePage {
     await editInput.press('Enter');
   }
 
+  async fillEditAndDiscard(currentText: string, typedText: string): Promise<void> {
+    await this.todoItem(currentText).locator('label').dblclick();
+    const editInput = this.page.locator('li.editing .edit');
+    await editInput.fill(typedText);
+    await editInput.press('Escape');
+  }
+
   async toggleAll(): Promise<void> {
     await this.toggleAllCheckbox.click();
   }

@@ -1,18 +1,11 @@
-import { test, expect } from '@playwright/test';
-import { TodoMVCPage } from '../../pages/todomvc.page';
+import { test, expect } from '../../fixtures';
 
 test.describe('TodoMVC', () => {
-  let todo: TodoMVCPage;
-
-  test.beforeEach(async ({ page }) => {
-    todo = new TodoMVCPage(page);
-    await todo.navigate();
-  });
 
   // ─── Adding todos ─────────────────────────────────────────────────────────
 
   test.describe('Adding todos', () => {
-    test('adds a single todo', async () => {
+    test('adds a single todo', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
 
       await todo.assertTodoVisible('Buy groceries');
@@ -20,7 +13,7 @@ test.describe('TodoMVC', () => {
       await todo.assertItemsLeft(1);
     });
 
-    test('adds multiple todos in order', async () => {
+    test('adds multiple todos in order', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
       await todo.addTodo('Read a book');
@@ -30,12 +23,12 @@ test.describe('TodoMVC', () => {
       await todo.assertTodoOrder(['Buy groceries', 'Walk the dog', 'Read a book']);
     });
 
-    test('clears the input field after adding', async () => {
+    test('clears the input field after adding', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await expect(todo.input).toHaveValue('');
     });
 
-    test('does not add an empty todo', async () => {
+    test('does not add an empty todo', async ({ todoPage: todo }) => {
       await todo.input.press('Enter');
       await todo.assertTodoCount(0);
     });
@@ -44,12 +37,12 @@ test.describe('TodoMVC', () => {
   // ─── Completing todos ─────────────────────────────────────────────────────
 
   test.describe('Completing todos', () => {
-    test.beforeEach(async () => {
+    test.beforeEach(async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
     });
 
-    test('marks a todo as complete', async () => {
+    test('marks a todo as complete', async ({ todoPage: todo }) => {
       await todo.completeTodo('Buy groceries');
 
       await todo.assertTodoCompleted('Buy groceries');
@@ -57,7 +50,7 @@ test.describe('TodoMVC', () => {
       await todo.assertItemsLeft(1);
     });
 
-    test('unchecks a completed todo', async () => {
+    test('unchecks a completed todo', async ({ todoPage: todo }) => {
       await todo.completeTodo('Buy groceries');
       await todo.completeTodo('Buy groceries');
 
@@ -69,7 +62,7 @@ test.describe('TodoMVC', () => {
   // ─── Deleting todos ───────────────────────────────────────────────────────
 
   test.describe('Deleting todos', () => {
-    test('removes a todo via the delete button', async () => {
+    test('removes a todo via the delete button', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
 
@@ -84,7 +77,7 @@ test.describe('TodoMVC', () => {
   // ─── Editing todos ────────────────────────────────────────────────────────
 
   test.describe('Editing todos', () => {
-    test('edits a todo on double-click and saves on Enter', async () => {
+    test('edits a todo on double-click and saves on Enter', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
 
       await todo.editTodo('Buy groceries', 'Buy organic groceries');
@@ -93,13 +86,10 @@ test.describe('TodoMVC', () => {
       await todo.assertTodoHidden('Buy groceries');
     });
 
-    test('discards edit on Escape', async ({ page }) => {
+    test('discards edit on Escape', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
-      await todo.todoItem('Buy groceries').locator('label').dblclick();
 
-      const editInput = page.locator('li.editing .edit');
-      await editInput.fill('Should be discarded');
-      await editInput.press('Escape');
+      await todo.fillEditAndDiscard('Buy groceries', 'Should be discarded');
 
       await todo.assertTodoVisible('Buy groceries');
       await todo.assertTodoHidden('Should be discarded');
@@ -109,14 +99,14 @@ test.describe('TodoMVC', () => {
   // ─── Filtering ────────────────────────────────────────────────────────────
 
   test.describe('Filtering', () => {
-    test.beforeEach(async () => {
+    test.beforeEach(async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
       await todo.addTodo('Read a book');
       await todo.completeTodo('Buy groceries');
     });
 
-    test('Active filter shows only incomplete todos', async () => {
+    test('Active filter shows only incomplete todos', async ({ todoPage: todo }) => {
       await todo.filterBy('Active');
 
       await todo.assertTodoHidden('Buy groceries');
@@ -124,7 +114,7 @@ test.describe('TodoMVC', () => {
       await todo.assertTodoVisible('Read a book');
     });
 
-    test('Completed filter shows only finished todos', async () => {
+    test('Completed filter shows only finished todos', async ({ todoPage: todo }) => {
       await todo.filterBy('Completed');
 
       await todo.assertTodoVisible('Buy groceries');
@@ -132,7 +122,7 @@ test.describe('TodoMVC', () => {
       await todo.assertTodoHidden('Read a book');
     });
 
-    test('All filter shows every todo', async () => {
+    test('All filter shows every todo', async ({ todoPage: todo }) => {
       await todo.filterBy('Completed');
       await todo.filterBy('All');
 
@@ -141,27 +131,27 @@ test.describe('TodoMVC', () => {
       await todo.assertTodoVisible('Read a book');
     });
 
-    test('Active filter sets URL hash to #/active', async ({ page }) => {
+    test('Active filter sets URL hash to #/active', async ({ todoPage: todo }) => {
       await todo.filterBy('Active');
-      expect(page.url()).toContain('#/active');
+      await todo.assertURL(/#\/active/);
     });
 
-    test('Completed filter sets URL hash to #/completed', async ({ page }) => {
+    test('Completed filter sets URL hash to #/completed', async ({ todoPage: todo }) => {
       await todo.filterBy('Completed');
-      expect(page.url()).toContain('#/completed');
+      await todo.assertURL(/#\/completed/);
     });
   });
 
   // ─── Bulk actions ─────────────────────────────────────────────────────────
 
   test.describe('Bulk actions', () => {
-    test.beforeEach(async () => {
+    test.beforeEach(async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
       await todo.addTodo('Read a book');
     });
 
-    test('toggle-all marks every todo as complete', async () => {
+    test('toggle-all marks every todo as complete', async ({ todoPage: todo }) => {
       await todo.toggleAll();
 
       await todo.assertTodoCompleted('Buy groceries');
@@ -170,7 +160,7 @@ test.describe('TodoMVC', () => {
       await todo.assertItemsLeft(0);
     });
 
-    test('toggle-all unchecks all when all are already complete', async () => {
+    test('toggle-all unchecks all when all are already complete', async ({ todoPage: todo }) => {
       await todo.toggleAll();
       await todo.toggleAll();
 
@@ -180,7 +170,7 @@ test.describe('TodoMVC', () => {
       await todo.assertItemsLeft(3);
     });
 
-    test('Clear completed removes all completed todos', async () => {
+    test('Clear completed removes all completed todos', async ({ todoPage: todo }) => {
       await todo.completeTodo('Buy groceries');
       await todo.completeTodo('Walk the dog');
 
@@ -192,7 +182,7 @@ test.describe('TodoMVC', () => {
       await todo.assertTodoCount(1);
     });
 
-    test('Clear completed button is hidden when no todos are complete', async () => {
+    test('Clear completed button is hidden when no todos are complete', async ({ todoPage: todo }) => {
       await todo.assertClearCompletedHidden();
     });
   });
@@ -200,7 +190,7 @@ test.describe('TodoMVC', () => {
   // ─── Counter ──────────────────────────────────────────────────────────────
 
   test.describe('Items-left counter', () => {
-    test('shows singular "item" for exactly one remaining', async () => {
+    test('shows singular "item" for exactly one remaining', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
       await todo.completeTodo('Walk the dog');
@@ -208,7 +198,7 @@ test.describe('TodoMVC', () => {
       await todo.assertItemsLeft(1);
     });
 
-    test('shows plural "items" for two or more remaining', async () => {
+    test('shows plural "items" for two or more remaining', async ({ todoPage: todo }) => {
       await todo.addTodo('Buy groceries');
       await todo.addTodo('Walk the dog');
 

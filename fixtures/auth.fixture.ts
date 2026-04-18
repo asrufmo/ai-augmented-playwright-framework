@@ -1,8 +1,10 @@
-import { test as base, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { test as base } from './pages.fixture';
 import * as path from 'path';
 import * as fs from 'fs';
 import { AuthApiClient } from '../api-clients/auth.client';
 import { UsersApiClient } from '../api-clients/users.client';
+import { LoginPage } from '../pages/login.page';
 import { Env } from '../config/environments';
 import { STORAGE } from '../constants';
 import { ensureDir } from '../utils/helpers';
@@ -41,11 +43,9 @@ async function getOrCreateAuthState(
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  await page.goto('/login');
-  await page.getByLabel('Email address').fill(credentials.email);
-  await page.getByLabel('Password').fill(credentials.password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await page.waitForURL(/\/dashboard/);
+  const loginPage = new LoginPage(page);
+  await loginPage.navigate();
+  await loginPage.loginAndWaitForDashboard(credentials.email, credentials.password);
   await context.storageState({ path: storageStatePath });
 
   await page.close();
