@@ -1,0 +1,22 @@
+{
+  "users": [
+    {
+      "email": "standard@example.com",
+      "password": "Test1234!",
+      "name": "Standard User",
+      "role": "user"
+    },
+    {
+      "email": "admin@example.com",
+      "password": "Admin1234!",
+      "name": "Admin User",
+      "role": "admin"
+    },
+    {
+      "email": "viewer@example.com",
+      "password": "Viewer1234!",
+      "name": "Viewer User",
+      "role": "viewer"
+    }
+  ]
+}

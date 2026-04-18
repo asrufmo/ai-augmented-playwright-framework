@@ -1,0 +1,36 @@
+{
+  "name": "playwright-starter",
+  "version": "1.0.0",
+  "description": "Production-ready Playwright framework with TypeScript, UI/API testing, and AI-assisted workflows",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test tests/ui --project=chromium",
+    "test:public": "playwright test tests/public --project=public",
+    "test:public:firefox": "playwright test tests/public --project=firefox-public",
+    "test:api": "playwright test tests/api --project=api",
+    "test:browserstack": "playwright test tests/public --project=bs-chrome-win --project=bs-safari-mac",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:perf": "k6 run performance/posts.k6.js",
+    "report": "playwright show-report",
+    "codegen": "playwright codegen",
+    "ai:snapshot": "ts-node ai-workflows/scripts/capture-snapshot.ts",
+    "ai:analyze": "ts-node ai-workflows/scripts/analyze-failure.ts",
+    "ai:selectors": "ts-node ai-workflows/scripts/suggest-selectors.ts",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "@types/node": "^20.12.0",
+    "typescript": "^5.4.5",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "ts-node": "^10.9.2",
+    "dotenv": "^16.4.5"
+  },
+  "dependencies": {
+    "winston": "^3.13.0"
+  }
+}

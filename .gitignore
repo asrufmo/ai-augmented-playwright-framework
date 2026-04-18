@@ -1,0 +1,17 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+logs/
+ai-workflows/output/
+.env
+*.env.local
+.playwright-mcp/
+performance/results.json
+performance/summary.html
+*.tsbuildinfo
+.DS_Store
+
+# Claude Code local config
+.claude/
+.mcp.json

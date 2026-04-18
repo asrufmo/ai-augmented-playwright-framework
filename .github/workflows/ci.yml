@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Quality Gate ────────────────────────────────────────────────────────────
+  quality-gate:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  # ─── API Tests (no browser, fastest feedback) ────────────────────────────────
+  test-api:
+    name: API Tests — JSONPlaceholder
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run API tests
+        run: npx playwright test tests/api --project=api
+        env:
+          ENVIRONMENT: local
+
+      - name: Upload API report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+  # ─── Public UI Tests — Chromium ──────────────────────────────────────────────
+  test-ui-chromium:
+    name: UI Tests — Chromium
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run public UI tests
+        run: npx playwright test tests/public --project=public
+        env:
+          ENVIRONMENT: local
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-chromium-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload traces on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-chromium-traces-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+
+  # ─── Public UI Tests — Firefox ───────────────────────────────────────────────
+  test-ui-firefox:
+    name: UI Tests — Firefox
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Firefox
+        run: npx playwright install firefox --with-deps
+
+      - name: Run public UI tests (Firefox)
+        run: npx playwright test tests/public --project=firefox-public
+        env:
+          ENVIRONMENT: local
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-firefox-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+  # ─── BrowserStack (manual trigger or release branch only) ────────────────────
+  test-browserstack:
+    name: BrowserStack Cross-Browser
+    needs: [test-ui-chromium, test-api]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests on BrowserStack
+        run: npx playwright test tests/public --project=bs-chrome-win --project=bs-safari-mac
+        env:
+          ENVIRONMENT: local
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
