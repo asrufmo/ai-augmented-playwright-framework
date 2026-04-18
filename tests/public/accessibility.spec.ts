@@ -36,7 +36,7 @@ function formatViolations(violations: Result[]): string {
 
 test.describe('Accessibility — WCAG 2.1 AA', () => {
 
-  test('empty state: input area has no violations', async ({ todoPage, page }) => {
+  test('empty state: input area has no violations', async ({ todoPage: _todoPage, page }) => {
     const { violations } = await new AxeBuilder({ page })
       .include(APP_SELECTOR)
       .withTags(WCAG_TAGS)
