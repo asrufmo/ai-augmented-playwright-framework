@@ -1,4 +1,4 @@
-import { type Page, type Locator, expect } from '@playwright/test';
+import { type Locator, expect } from '@playwright/test';
 import { BasePage } from './base.page';
 import { ROUTES } from '../constants';
 

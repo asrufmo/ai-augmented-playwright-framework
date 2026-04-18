@@ -17,7 +17,7 @@
     "ai:snapshot": "ts-node ai-workflows/scripts/capture-snapshot.ts",
     "ai:analyze": "ts-node ai-workflows/scripts/analyze-failure.ts",
     "ai:selectors": "ts-node ai-workflows/scripts/suggest-selectors.ts",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -25,8 +25,8 @@
     "@types/node": "^20.12.0",
     "typescript": "^5.4.5",
     "eslint": "^9.0.0",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "ts-node": "^10.9.2",
     "dotenv": "^16.4.5"
   },

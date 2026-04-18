@@ -17,7 +17,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AiFailureAnalysis, FailureContext } from '../../types';
+import type { FailureContext } from '../../types';
 
 const OUTPUT_DIR = path.resolve('./ai-workflows/output');
 const DEFAULT_RESULTS = './test-results/results.json';
