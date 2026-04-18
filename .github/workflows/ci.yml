@@ -133,6 +133,78 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
+  # ─── Accessibility Tests — WCAG 2.1 AA ──────────────────────────────────────
+  test-accessibility:
+    name: Accessibility — WCAG 2.1 AA (axe-core)
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run accessibility scans
+        run: npx playwright test tests/public/accessibility.spec.ts --project=public
+        env:
+          ENVIRONMENT: local
+
+      - name: Upload accessibility report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accessibility-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+  # ─── Mobile Chrome Tests ─────────────────────────────────────────────────────
+  test-mobile:
+    name: UI Tests — Mobile Chrome (Pixel 5)
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run tests on mobile viewport
+        run: npx playwright test tests/public --project=mobile-public
+        env:
+          ENVIRONMENT: local
+
+      - name: Upload mobile report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload traces on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: mobile-traces-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+
   # ─── BrowserStack (manual trigger or release branch only) ────────────────────
   test-browserstack:
     name: BrowserStack Cross-Browser

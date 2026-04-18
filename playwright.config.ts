@@ -119,6 +119,11 @@ export default defineConfig({
       use: { ...devices['Desktop Firefox'] },
       testMatch: /tests\/public\/.*/,
     },
+    {
+      name: 'mobile-public',
+      use: { ...devices['Pixel 5'] },
+      testMatch: /tests\/public\/.*/,
+    },
 
     // --- BrowserStack cross-browser (activated via BROWSERSTACK_* env vars) ---
     ...browserStackProjects,
