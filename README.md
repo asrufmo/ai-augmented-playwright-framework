@@ -1,6 +1,6 @@
 # Playwright Starter Framework
 
-![CI](https://github.com/<YOUR_GITHUB_USERNAME>/playwright-starter/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/asrufmo/ai-augmented-playwright-framework/actions/workflows/ci.yml/badge.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Playwright](https://img.shields.io/badge/Playwright-1.44-green)
 
